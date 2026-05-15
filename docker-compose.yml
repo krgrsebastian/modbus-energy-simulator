@@ -1,6 +1,7 @@
 services:
   modbus-simulator:
-    build: .
+    image: skumh/modbus-energy-simulator:0.1.0
+    # Or build locally with: build: .
     container_name: modbus-simulator
     ports:
       - "1502:1502"

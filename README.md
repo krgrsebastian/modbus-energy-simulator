@@ -1,23 +1,39 @@
 # Modbus Energy Simulator
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/skumh/modbus-energy-simulator)](https://hub.docker.com/r/skumh/modbus-energy-simulator)
+[![Docker Image Version](https://img.shields.io/docker/v/skumh/modbus-energy-simulator?sort=semver)](https://hub.docker.com/r/skumh/modbus-energy-simulator/tags)
+
 A small Docker container that simulates a 3-phase energy meter over Modbus TCP.
 Use it during benthos-umh / UMH development when you don't have a real meter
 on the bench.
 
-The compose file brings up the simulator side-by-side with
-`benthos-umh:latest` configured as a Modbus client. Within a few seconds you
-should see decoded JSON messages stream to stdout.
+Published image (multi-arch, `linux/amd64` + `linux/arm64`):
 
-## Quick start
-
-```bash
-docker compose up --build
+```
+docker pull skumh/modbus-energy-simulator:0.1.0
 ```
 
-The simulator listens on `tcp://localhost:1502` (also reachable from
-`benthos-umh` over the compose network as `modbus-simulator:1502`).
+## Quick start — just the simulator
 
-Tear down with `docker compose down`.
+```bash
+docker run --rm -p 1502:1502 skumh/modbus-energy-simulator:0.1.0
+```
+
+The simulator listens on `tcp://localhost:1502`. Point any Modbus TCP client
+at it (slave ID 1, big-endian word order).
+
+## Quick start — with benthos-umh + UMH Core
+
+The included `docker-compose.yml` brings up the simulator side-by-side with
+benthos-umh / UMH Core (`umh-core`). Within a few seconds you should see
+decoded JSON messages flowing through the bridge.
+
+```bash
+docker compose up
+```
+
+Replace `AUTH_TOKEN` in `docker-compose.yml` with your own UMH Core token
+before starting (`docker compose down` to tear down).
 
 ## Register map
 
