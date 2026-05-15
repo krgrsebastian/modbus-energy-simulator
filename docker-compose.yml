@@ -1,0 +1,28 @@
+services:
+  modbus-simulator:
+    build: .
+    container_name: modbus-simulator
+    ports:
+      - "1502:1502"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; socket.create_connection(('127.0.0.1', 1502), 1).close()",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  umh-core:
+    image: management.umh.app/oci/united-manufacturing-hub/umh-core:v0.44.19 # TODO: change this
+    restart: unless-stopped
+    volumes:
+      - ./umh-data:/data
+    environment:
+      - AUTH_TOKEN=REPLACE_ME_WITH_YOUR_UMH_AUTH_TOKEN
+      - RELEASE_CHANNEL=stable
+      - API_URL=https://management.umh.app/api
+      - LOCATION_0=umh # TODO: change this

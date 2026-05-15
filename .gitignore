@@ -1,0 +1,16 @@
+# umh-core runtime state — never commit
+umh-data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.python-version
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp

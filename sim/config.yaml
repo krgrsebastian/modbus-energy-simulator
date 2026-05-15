@@ -1,0 +1,22 @@
+host: 0.0.0.0
+port: 1502
+slave_id: 1
+tick_seconds: 1.0
+
+# Base values around which the simulator oscillates.
+nominal_voltage: 230.0     # V (per phase)
+nominal_current: 5.0       # A (per phase)
+nominal_power_factor: 0.92
+nominal_frequency: 50.0    # Hz
+
+# Noise amplitudes (peak deviation from nominal).
+voltage_noise: 2.0
+current_walk_step: 0.2     # max step per tick for the bounded random walk
+current_min: 0.5
+current_max: 20.0
+pf_noise: 0.02
+frequency_noise: 0.05
+
+# Energy counters scale (multiplier on real-time integration to make the
+# numbers move visibly during a short demo).
+energy_speedup: 1.0

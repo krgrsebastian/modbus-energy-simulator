@@ -1,0 +1,29 @@
+input:
+  modbus:
+    controller: tcp://modbus-simulator:1502
+    slaveIDs: [1]
+    byteOrder: ABCD
+    timeBetweenReads: 1s
+    timeout: 2s
+    unifiedAddresses:
+      - "voltage_l1.holding.0.FLOAT32"
+      - "voltage_l2.holding.2.FLOAT32"
+      - "voltage_l3.holding.4.FLOAT32"
+      - "current_l1.holding.6.FLOAT32"
+      - "current_l2.holding.8.FLOAT32"
+      - "current_l3.holding.10.FLOAT32"
+      - "power_active_total.holding.12.FLOAT32"
+      - "power_reactive_total.holding.14.FLOAT32"
+      - "power_apparent_total.holding.16.FLOAT32"
+      - "power_factor.holding.18.FLOAT32"
+      - "frequency.holding.20.FLOAT32"
+      - "energy_active_import.holding.30.UINT32"
+      - "energy_active_export.holding.32.UINT32"
+      - "status.holding.100.UINT16"
+
+output:
+  stdout: {}
+
+logger:
+  level: INFO
+  format: logfmt

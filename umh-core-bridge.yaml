@@ -1,0 +1,74 @@
+# Drop-in snippet for umh-core's /data/config.yaml (mounted as ./umh-data/config.yaml
+# in this directory's docker-compose.yml).
+#
+# Defines a Bridge (= protocolConverter) named "energy-meter-sim" that reads the
+# Modbus simulator on this compose network and publishes each tag to the UNS as
+# umh.v1.<location_path>._raw.<tag_name>.
+#
+# After editing /data/config.yaml, umh-core picks up the change automatically;
+# you should see a new bridge under "Bridges" in the Management Console and
+# data flowing within a few seconds.
+#
+# Verify topics from outside:
+#   docker exec -it umh-core sh -c "rpk topic consume umh.messages --num 20"
+
+agent:
+  metricsPort: 8080
+  location:
+    0: "demo"
+    1: "lab"
+
+templates:
+  protocolConverter:
+    modbus-energy-meter:
+      connection:
+        nmap:
+          target: "{{ .IP }}"
+          port: "{{ .PORT }}"
+      dataflowcomponent_read:
+        benthos:
+          input:
+            modbus:
+              controller: "tcp://{{ .IP }}:{{ .PORT }}"
+              slaveIDs: [1]
+              byteOrder: ABCD
+              timeBetweenReads: 1s
+              timeout: 2s
+              unifiedAddresses:
+                - "voltage_l1.holding.0.FLOAT32"
+                - "voltage_l2.holding.2.FLOAT32"
+                - "voltage_l3.holding.4.FLOAT32"
+                - "current_l1.holding.6.FLOAT32"
+                - "current_l2.holding.8.FLOAT32"
+                - "current_l3.holding.10.FLOAT32"
+                - "power_active_total.holding.12.FLOAT32"
+                - "power_reactive_total.holding.14.FLOAT32"
+                - "power_apparent_total.holding.16.FLOAT32"
+                - "power_factor.holding.18.FLOAT32"
+                - "frequency.holding.20.FLOAT32"
+                - "energy_active_import.holding.30.UINT32"
+                - "energy_active_export.holding.32.UINT32"
+                - "status.holding.100.UINT16"
+          pipeline:
+            processors:
+              - tag_processor:
+                  defaults: |
+                    msg.meta.location_path = "{{ .location_path }}";
+                    msg.meta.data_contract = "_raw";
+                    msg.meta.tag_name      = msg.meta.modbus_tag_name;
+                    msg.meta.host          = "{{ .IP }}";
+                    msg.meta.port          = "{{ .PORT }}";
+                    return msg;
+          buffer:
+            none: {}
+
+protocolConverter:
+  - name: energy-meter-sim
+    desiredState: active
+    protocolConverterServiceConfig:
+      location:
+        2: "energy-meter"
+      templateRef: modbus-energy-meter
+      variables:
+        IP:   "modbus-simulator"
+        PORT: "1502"
