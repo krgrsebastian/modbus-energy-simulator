@@ -50,7 +50,9 @@ def load_config() -> dict:
 
 def build_context(slave_id: int) -> ModbusServerContext:
     block = ModbusSequentialDataBlock(0, [0] * HR_SIZE)
-    slave = ModbusSlaveContext(hr=block, zero_mode=True)
+    # 3.8 dropped the zero_mode kwarg; the datastore is zero-based either way,
+    # so register 0 in the map above is still holding register 0 on the wire.
+    slave = ModbusSlaveContext(hr=block)
     return ModbusServerContext(slaves={slave_id: slave}, single=False)
 
 
