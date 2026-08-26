@@ -45,7 +45,33 @@ HR_SIZE = 200  # registers 0..199; ample headroom for the layout
 
 def load_config() -> dict:
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    return apply_env_overrides(cfg)
+
+
+def apply_env_overrides(cfg: dict) -> dict:
+    """Let any scalar in config.yaml be overridden by SIM_<KEY>.
+
+    One rule instead of a hand-maintained list of supported variables, so
+    SIM_NOMINAL_CURRENT or SIM_NOMINAL_POWER_FACTOR work without this file
+    knowing about them. The value is coerced to the type already in the config,
+    and a value that will not convert is reported rather than silently ignored
+    -- a typo in a compose file should not look like it worked.
+    """
+    for key, current in list(cfg.items()):
+        raw = os.environ.get("SIM_" + key.upper())
+        if raw is None:
+            continue
+        try:
+            cfg[key] = type(current)(raw)
+        except (TypeError, ValueError):
+            LOG.warning(
+                "ignoring SIM_%s=%r: cannot read it as %s (keeping %r)",
+                key.upper(), raw, type(current).__name__, current,
+            )
+            continue
+        LOG.info("config override: %s = %r (was %r)", key, cfg[key], current)
+    return cfg
 
 
 def build_context(slave_id: int) -> ModbusServerContext:
@@ -92,11 +118,19 @@ class EnergyMeterModel:
             for phase in (0.0, 2 * math.pi / 3, 4 * math.pi / 3)
         ]
 
+        # A plain random walk has no memory of where it started, so
+        # nominal_current used to set only the first tick: over a few hours the
+        # current wandered across the whole [min, max] band and two meters
+        # configured differently became indistinguishable. The pull term drags
+        # it back toward nominal, which is what makes nominal_current a knob for
+        # how much power this asset draws.
         step = self.cfg["current_walk_step"]
         i_min = self.cfg["current_min"]
         i_max = self.cfg["current_max"]
+        i_nom = self.cfg["nominal_current"]
+        pull = self.cfg.get("current_pull", 0.02)
         self.currents = [
-            min(i_max, max(i_min, i + random.uniform(-step, step)))
+            min(i_max, max(i_min, i + random.uniform(-step, step) + pull * (i_nom - i)))
             for i in self.currents
         ]
 
@@ -179,6 +213,13 @@ async def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     cfg = load_config()
+    if not cfg["current_min"] <= cfg["nominal_current"] <= cfg["current_max"]:
+        LOG.warning(
+            "nominal_current %.2f A is outside [%.2f, %.2f]: the walk is clamped to the "
+            "band, so the meter will not draw what you asked for. Raise SIM_CURRENT_MAX "
+            "(or lower SIM_CURRENT_MIN) to match.",
+            cfg["nominal_current"], cfg["current_min"], cfg["current_max"],
+        )
     slave_id = int(cfg["slave_id"])
     context = build_context(slave_id)
     model = EnergyMeterModel(cfg)

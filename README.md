@@ -10,13 +10,13 @@ on the bench.
 Published image (multi-arch, `linux/amd64` + `linux/arm64`):
 
 ```
-docker pull skumh/modbus-energy-simulator:0.1.1
+docker pull skumh/modbus-energy-simulator:0.2.0
 ```
 
 ## Quick start — just the simulator
 
 ```bash
-docker run --rm -p 1502:1502 skumh/modbus-energy-simulator:0.1.1
+docker run --rm -p 1502:1502 skumh/modbus-energy-simulator:0.2.0
 ```
 
 The simulator listens on `tcp://localhost:1502`. Point any Modbus TCP client
@@ -132,3 +132,58 @@ docker exec <container> sh -c 'ls /proc/1/fd | wc -l'
 
 At rest the stale listeners cost nothing, so a snapshot taken while no client is
 connecting looks innocent.
+
+## Configuring a meter from compose
+
+Every scalar in `sim/config.yaml` can be overridden with `SIM_<KEY>`, so you do
+not need to mount a config file to change one number. The value is coerced to
+the type already in the config, the effective value is logged at startup, and a
+value that cannot be read is reported and ignored rather than silently dropped:
+
+```
+INFO  config override: nominal_current = 10.0 (was 5.0)
+WARN  ignoring SIM_NOMINAL_CURRENT='zehn': cannot read it as float (keeping 5.0)
+```
+
+**To give an asset twice the power, double `nominal_current`** — power is
+voltage x current x power factor, and the voltage is fixed at nominal:
+
+```yaml
+  energy-sim-big:
+    image: skumh/modbus-energy-simulator:0.2.0
+    environment:
+      SIM_NOMINAL_CURRENT: "10"      # 5 A -> 10 A, so ~3.2 kW -> ~6.4 kW
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+```
+
+Measured over 8 simulated hours: 5 A gives 3188 W, 10 A gives 6376 W (2.01x),
+15 A gives 9516 W (3.00x).
+
+**The power factor is not the knob for consumption.** It caps at 1.0, so from
+the default 0.92 there is only 9% to gain; dropping it to 0.75 *lowers* active
+power to 0.82x while the current stays put. Set `SIM_NOMINAL_POWER_FACTOR` when
+you want a meter with a poor pf to look at, not to move the load.
+
+Going past ~20 A also needs the walk band widened, and the simulator says so at
+startup rather than quietly clamping:
+
+```yaml
+      SIM_NOMINAL_CURRENT: "15"
+      SIM_CURRENT_MAX: "25"
+```
+
+### Why nominal_current only became a real knob in 0.2.0
+
+Before 0.2.0 the current was a free random walk clamped to
+`[current_min, current_max]`, with nothing pulling it back, so
+`nominal_current` set the *first tick* and nothing else. Measured over 8 hours:
+starting at 5 A the current wandered the whole band and averaged 6.2 A;
+starting at 10 A it averaged 7.9 A with a standard deviation of 6.05 A. Two
+meters configured differently were indistinguishable after an hour or two.
+
+0.2.0 adds `current_pull` (default 0.02 per tick), a pull toward
+`nominal_current`, which brings the standard deviation down to 0.58 A and makes
+the mean sit on the configured value. Set `SIM_CURRENT_PULL=0` for the old
+free-walk behaviour.

@@ -12,6 +12,8 @@ nominal_frequency: 50.0    # Hz
 # Noise amplitudes (peak deviation from nominal).
 voltage_noise: 2.0
 current_walk_step: 0.2     # max step per tick for the bounded random walk
+current_pull: 0.02         # per-tick pull back toward nominal_current
+                           # (0 = free walk, which drifts away from nominal)
 current_min: 0.5
 current_max: 20.0
 pf_noise: 0.02
