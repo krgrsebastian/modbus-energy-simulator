@@ -10,13 +10,13 @@ on the bench.
 Published image (multi-arch, `linux/amd64` + `linux/arm64`):
 
 ```
-docker pull skumh/modbus-energy-simulator:0.1.0
+docker pull skumh/modbus-energy-simulator:0.1.1
 ```
 
 ## Quick start — just the simulator
 
 ```bash
-docker run --rm -p 1502:1502 skumh/modbus-energy-simulator:0.1.0
+docker run --rm -p 1502:1502 skumh/modbus-energy-simulator:0.1.1
 ```
 
 The simulator listens on `tcp://localhost:1502`. Point any Modbus TCP client
@@ -101,3 +101,34 @@ To run the simulator outside Docker:
 pip install pymodbus==3.7.* pyyaml
 python -m sim.server
 ```
+
+## Give it a log limit
+
+The container inherits the daemon's logging defaults unless you say otherwise,
+and an unbounded json-file log turns any log loop into a disk-full outage. In
+compose:
+
+```yaml
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+```
+
+This is not hypothetical here. Up to 0.1.0 the server leaked one *listening*
+socket per closed connection (a pymodbus 3.7 bug), so a client that reconnects
+walked the process up to the 1024 file-descriptor limit. From that point every
+connection attempt failed to bind and pymodbus logged it — measured at 37,000
+lines a second, 4.3 MB/s, about 15 GB an hour — which pegged a core in log
+formatting and dragged `dockerd` down with it. 0.1.1 pins pymodbus 3.8, which
+does not leak: 1800 connect/close cycles leave the process at 9 descriptors and
+one listener.
+
+If you are on 0.1.0, the fingerprint is a listener count near the fd limit:
+
+```bash
+docker exec <container> sh -c "awk 'NR>1 && \$4==\"0A\"' /proc/net/tcp | wc -l"
+docker exec <container> sh -c 'ls /proc/1/fd | wc -l'
+```
+
+At rest the stale listeners cost nothing, so a snapshot taken while no client is
+connecting looks innocent.
