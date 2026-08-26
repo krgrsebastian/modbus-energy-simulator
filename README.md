@@ -174,6 +174,36 @@ startup rather than quietly clamping:
       SIM_CURRENT_MAX: "25"
 ```
 
+### Presets for a few machine types
+
+`P = (V1 x I1 + V2 x I2 + V3 x I3) x pf`, so at 3 x 230 V and pf 0.92 one amp is
+about 635 W, and `I = P / (3 x 230 x pf)`. Measured over 8 simulated hours:
+
+| Machine | `SIM_NOMINAL_CURRENT` | `SIM_NOMINAL_POWER_FACTOR` | `SIM_CURRENT_MAX` | `SIM_CURRENT_WALK_STEP` | gives |
+|---|---|---|---|---|---|
+| 5-axis machining centre | 17 | 0.90 | 30 | 0.5 | 10.5 kW (8.4-12.5) |
+| Parts washer | 32 | 0.93 | 50 | 0.9 | 20.5 kW (16.8-24.3) |
+| Hardening furnace | 63 | 0.99 | 90 | 1.8 | 42.8 kW (36.1-50.7) |
+
+Typical *operating* draw, not connected load — a 5-axis centre of that class is
+20-40 kVA installed but averages 8-15 kW while machining, and an electric
+hardening furnace is 60-150 kVA installed and averages 30-50 kW. The power
+factors are the physics: variable-frequency drives on the machining centre,
+essentially resistive heating in the furnace.
+
+`SIM_CURRENT_MAX` has to clear the nominal or the walk is clamped to the default
+20 A band. `SIM_CURRENT_WALK_STEP` scales with it: the standard deviation is
+about 2.9 x the step, so a proportional step keeps the relative wobble the same
+across machines -- left at the default the furnace at 63 A is almost a flat
+line.
+
+**These are averages, not load profiles.** A real machining centre sits at
+2-4 kW between parts and jumps to 12-15 kW in the cut; a furnace ramps near
+full power and drops to a fraction of it while soaking. This simulator wobbles
+smoothly around one mean and knows nothing about a machine cycle, which is fine
+for consumption dashboards and for telling assets apart, and wrong if you need
+the idle/cut or ramp/soak structure.
+
 ### Why nominal_current only became a real knob in 0.2.0
 
 Before 0.2.0 the current was a free random walk clamped to
