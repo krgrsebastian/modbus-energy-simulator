@@ -22,3 +22,24 @@ frequency_noise: 0.05
 # Energy counters scale (multiplier on real-time integration to make the
 # numbers move visibly during a short demo).
 energy_speedup: 1.0
+
+# Energy counters integrate the 3-phase power; demand is the average active
+# power over this sliding window (the classic 15-min billing interval).
+demand_window_seconds: 900
+
+# Harmonics (THD, in %).
+thd_voltage_nominal: 2.0
+thd_current_nominal: 8.0
+
+# Load profile: "constant" (current walks around nominal_current) or
+# "machine" (alternates production at nominal_current and idle at
+# idle_load_factor x nominal, with random durations).
+load_profile: constant
+idle_load_factor: 0.25
+production_min_seconds: 300
+production_max_seconds: 900
+idle_min_seconds: 60
+idle_max_seconds: 240
+
+# OPC UA server only (python -m sim.opcua_server).
+opcua_port: 4840

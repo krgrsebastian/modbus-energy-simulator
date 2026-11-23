@@ -19,6 +19,14 @@ input:
       - "frequency.holding.20.FLOAT32"
       - "energy_active_import.holding.30.UINT32"
       - "energy_active_export.holding.32.UINT32"
+      - "voltage_l1_l2.holding.22.FLOAT32"
+      - "current_n.holding.28.FLOAT32"
+      - "energy_reactive_import.holding.34.UINT32"
+      - "energy_apparent.holding.36.UINT32"
+      - "power_active_l1.holding.40.FLOAT32"
+      - "power_active_l2.holding.42.FLOAT32"
+      - "power_active_l3.holding.44.FLOAT32"
+      - "power_active_demand.holding.76.FLOAT32"
       - "status.holding.100.UINT16"
 
 output:

@@ -1,6 +1,6 @@
 services:
   modbus-simulator:
-    image: skumh/modbus-energy-simulator:0.1.0
+    image: skumh/modbus-energy-simulator:0.3.0
     # Or build locally with: build: .
     container_name: modbus-simulator
     ports:
@@ -16,6 +16,13 @@ services:
       interval: 2s
       timeout: 2s
       retries: 10
+
+  opcua-simulator:
+    image: skumh/opcua-energy-simulator:0.3.0
+    # Or build locally with: build: { context: ., dockerfile: Dockerfile.opcua }
+    container_name: opcua-simulator
+    ports:
+      - "4840:4840"
 
   umh-core:
     image: management.umh.app/oci/united-manufacturing-hub/umh-core:v0.44.19 # TODO: change this

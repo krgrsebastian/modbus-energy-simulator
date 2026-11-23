@@ -19,22 +19,9 @@ from pymodbus.client import ModbusTcpClient  # noqa: E402
 
 from sim.registers import regs_to_float32, regs_to_u32  # noqa: E402
 
-LAYOUT = [
-    ("voltage_l1",           0,  "float32"),
-    ("voltage_l2",           2,  "float32"),
-    ("voltage_l3",           4,  "float32"),
-    ("current_l1",           6,  "float32"),
-    ("current_l2",           8,  "float32"),
-    ("current_l3",           10, "float32"),
-    ("power_active_total",   12, "float32"),
-    ("power_reactive_total", 14, "float32"),
-    ("power_apparent_total", 16, "float32"),
-    ("power_factor",         18, "float32"),
-    ("frequency",            20, "float32"),
-    ("energy_active_import", 30, "uint32"),
-    ("energy_active_export", 32, "uint32"),
-    ("status",               100, "uint16"),
-]
+from sim.points import POINTS  # noqa: E402
+
+LAYOUT = [(p.name, p.modbus_addr, p.modbus_type.lower()) for p in POINTS]
 
 
 def read_once(client: ModbusTcpClient, slave: int) -> dict[str, float | int]:
@@ -75,9 +62,9 @@ def main() -> int:
             print(f"--- iteration {i + 1} ---")
             for k, v in snap.items():
                 if isinstance(v, float):
-                    print(f"  {k:<22} = {v:.3f}")
+                    print(f"  {k:<24} = {v:.3f}")
                 else:
-                    print(f"  {k:<22} = {v}")
+                    print(f"  {k:<24} = {v}")
 
             energy = int(snap["energy_active_import"])
             if last_energy is not None and energy < last_energy:

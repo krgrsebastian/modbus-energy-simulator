@@ -3,24 +3,32 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/skumh/modbus-energy-simulator)](https://hub.docker.com/r/skumh/modbus-energy-simulator)
 [![Docker Image Version](https://img.shields.io/docker/v/skumh/modbus-energy-simulator?sort=semver)](https://hub.docker.com/r/skumh/modbus-energy-simulator/tags)
 
-A small Docker container that simulates a 3-phase energy meter over Modbus TCP.
-Use it during benthos-umh / UMH development when you don't have a real meter
-on the bench.
+A small Docker container that simulates a 3-phase energy meter, over
+**Modbus TCP** or **OPC UA**. Use it during benthos-umh / UMH development, demos
+and workshops when you don't have a real meter on the bench.
 
-Published image (multi-arch, `linux/amd64` + `linux/arm64`):
+Both images run the same meter model (`sim/model.py`) and expose the same 40
+data points (`sim/points.py`): phase and line voltages, phase and neutral
+currents, active / reactive / apparent power and power factor per phase and in
+total, 15-min demand, four energy counters, frequency and THD.
+
+Published images (multi-arch, `linux/amd64` + `linux/arm64`):
 
 ```
-docker pull skumh/modbus-energy-simulator:0.2.0
+docker pull skumh/modbus-energy-simulator:0.3.0
+docker pull skumh/opcua-energy-simulator:0.3.0
 ```
 
 ## Quick start — just the simulator
 
 ```bash
-docker run --rm -p 1502:1502 skumh/modbus-energy-simulator:0.2.0
+docker run --rm -p 1502:1502 skumh/modbus-energy-simulator:0.3.0
+docker run --rm -p 4840:4840 skumh/opcua-energy-simulator:0.3.0
 ```
 
-The simulator listens on `tcp://localhost:1502`. Point any Modbus TCP client
-at it (slave ID 1, big-endian word order).
+The Modbus simulator listens on `tcp://localhost:1502` (slave ID 1, big-endian
+word order), the OPC UA simulator on `opc.tcp://localhost:4840` (security None,
+anonymous).
 
 ## Quick start — with benthos-umh + UMH Core
 
@@ -35,27 +43,110 @@ docker compose up
 Replace `AUTH_TOKEN` in `docker-compose.yml` with your own UMH Core token
 before starting (`docker compose down` to tear down).
 
-## Register map
+## Register map (Modbus)
 
 Slave ID `1`, all values in **holding registers** (function code `0x03`), byte
-order `ABCD` (big-endian). FLOAT32 / UINT32 spans two consecutive registers.
+order `ABCD` (big-endian). FLOAT32 / UINT32 span two consecutive registers.
+Addresses 0-33 and 100 are unchanged since 0.1.0; 0.3.0 only adds registers.
+Generated with `python -m sim.docs modbus`.
 
-| Address | Type    | Tag                    | Unit | Behavior                                         |
-|---------|---------|------------------------|------|--------------------------------------------------|
-| 0       | FLOAT32 | voltage_l1             | V    | 230 + 2·sin(t)                                   |
-| 2       | FLOAT32 | voltage_l2             | V    | 230 + 2·sin(t + 2π/3)                            |
-| 4       | FLOAT32 | voltage_l3             | V    | 230 + 2·sin(t + 4π/3)                            |
-| 6       | FLOAT32 | current_l1             | A    | 5 A + bounded random walk                        |
-| 8       | FLOAT32 | current_l2             | A    | 5 A + bounded random walk                        |
-| 10      | FLOAT32 | current_l3             | A    | 5 A + bounded random walk                        |
-| 12      | FLOAT32 | power_active_total     | W    | Σ V·I·PF                                         |
-| 14      | FLOAT32 | power_reactive_total   | var  | Σ V·I·sin φ                                      |
-| 16      | FLOAT32 | power_apparent_total   | VA   | √(P² + Q²)                                       |
-| 18      | FLOAT32 | power_factor           | —    | 0.92 ± 0.02                                      |
-| 20      | FLOAT32 | frequency              | Hz   | 50.0 ± 0.05                                      |
-| 30      | UINT32  | energy_active_import   | Wh   | monotonic, += P·Δt                               |
-| 32      | UINT32  | energy_active_export   | Wh   | monotonic, slower                                |
-| 100     | UINT16  | status                 | bits | b0 = online (always 1), b1 = alarm (toggles 60s) |
+| Address | Type | Tag | Unit | Description |
+|--|--|--|--|--|
+| 0 | FLOAT32 | voltage_l1 | V | Phase voltage L1-N |
+| 2 | FLOAT32 | voltage_l2 | V | Phase voltage L2-N |
+| 4 | FLOAT32 | voltage_l3 | V | Phase voltage L3-N |
+| 6 | FLOAT32 | current_l1 | A | Phase current L1 |
+| 8 | FLOAT32 | current_l2 | A | Phase current L2 |
+| 10 | FLOAT32 | current_l3 | A | Phase current L3 |
+| 12 | FLOAT32 | power_active_total | W | Active power, sum L1-L3 |
+| 14 | FLOAT32 | power_reactive_total | var | Reactive power, sum L1-L3 |
+| 16 | FLOAT32 | power_apparent_total | VA | Apparent power, sqrt(P^2 + Q^2) |
+| 18 | FLOAT32 | power_factor | - | Total power factor, P / S |
+| 20 | FLOAT32 | frequency | Hz | Grid frequency |
+| 22 | FLOAT32 | voltage_l1_l2 | V | Line voltage L1-L2 |
+| 24 | FLOAT32 | voltage_l2_l3 | V | Line voltage L2-L3 |
+| 26 | FLOAT32 | voltage_l3_l1 | V | Line voltage L3-L1 |
+| 28 | FLOAT32 | current_n | A | Neutral current (vector sum of L1-L3) |
+| 30 | UINT32 | energy_active_import | Wh | Active energy, import (counter) |
+| 32 | UINT32 | energy_active_export | Wh | Active energy, export (counter) |
+| 34 | UINT32 | energy_reactive_import | varh | Reactive energy, import (counter) |
+| 36 | UINT32 | energy_apparent | VAh | Apparent energy (counter) |
+| 40 | FLOAT32 | power_active_l1 | W | Active power L1 |
+| 42 | FLOAT32 | power_active_l2 | W | Active power L2 |
+| 44 | FLOAT32 | power_active_l3 | W | Active power L3 |
+| 46 | FLOAT32 | power_reactive_l1 | var | Reactive power L1 |
+| 48 | FLOAT32 | power_reactive_l2 | var | Reactive power L2 |
+| 50 | FLOAT32 | power_reactive_l3 | var | Reactive power L3 |
+| 52 | FLOAT32 | power_apparent_l1 | VA | Apparent power L1 |
+| 54 | FLOAT32 | power_apparent_l2 | VA | Apparent power L2 |
+| 56 | FLOAT32 | power_apparent_l3 | VA | Apparent power L3 |
+| 58 | FLOAT32 | power_factor_l1 | - | Power factor L1 |
+| 60 | FLOAT32 | power_factor_l2 | - | Power factor L2 |
+| 62 | FLOAT32 | power_factor_l3 | - | Power factor L3 |
+| 64 | FLOAT32 | thd_voltage_l1 | % | Total harmonic distortion, voltage L1 |
+| 66 | FLOAT32 | thd_voltage_l2 | % | Total harmonic distortion, voltage L2 |
+| 68 | FLOAT32 | thd_voltage_l3 | % | Total harmonic distortion, voltage L3 |
+| 70 | FLOAT32 | thd_current_l1 | % | Total harmonic distortion, current L1 |
+| 72 | FLOAT32 | thd_current_l2 | % | Total harmonic distortion, current L2 |
+| 74 | FLOAT32 | thd_current_l3 | % | Total harmonic distortion, current L3 |
+| 76 | FLOAT32 | power_active_demand | W | Average active power over the demand window (default 15 min) |
+| 78 | FLOAT32 | power_active_demand_max | W | Highest demand value since start |
+| 100 | UINT16 | status | bits | b0 = online (always 1), b1 = alarm (toggles every 60 s) |
+
+## Node list (OPC UA)
+
+Endpoint `opc.tcp://<host>:4840` (no path), security None, anonymous. All
+variables sit flat below the object `EM_01` (`ns=2;i=5000`), namespace URI
+`urn:umh:energy-meter-simulator` (index 2). Generated with
+`python -m sim.docs opcua`.
+
+**The node IDs are numeric and the browse names are short codes on purpose**,
+and the nodes carry no description. That is what OPC UA servers on PLCs and
+many meters look like: you only learn what `ns=2;i=6100` is from the vendor
+documentation. In benthos-umh the tag name is the browse name (`P_SUM`).
+
+| NodeId | Browse name | Data type | Unit | Description |
+|--|--|--|--|--|
+| `ns=2;i=6011` | U_L1N | Double | V | Phase voltage L1-N |
+| `ns=2;i=6012` | U_L2N | Double | V | Phase voltage L2-N |
+| `ns=2;i=6013` | U_L3N | Double | V | Phase voltage L3-N |
+| `ns=2;i=6021` | U_L12 | Double | V | Line voltage L1-L2 |
+| `ns=2;i=6022` | U_L23 | Double | V | Line voltage L2-L3 |
+| `ns=2;i=6023` | U_L31 | Double | V | Line voltage L3-L1 |
+| `ns=2;i=6031` | I_L1 | Double | A | Phase current L1 |
+| `ns=2;i=6032` | I_L2 | Double | A | Phase current L2 |
+| `ns=2;i=6033` | I_L3 | Double | A | Phase current L3 |
+| `ns=2;i=6034` | I_N | Double | A | Neutral current (vector sum of L1-L3) |
+| `ns=2;i=6100` | P_SUM | Double | W | Active power, sum L1-L3 |
+| `ns=2;i=6101` | P_L1 | Double | W | Active power L1 |
+| `ns=2;i=6102` | P_L2 | Double | W | Active power L2 |
+| `ns=2;i=6103` | P_L3 | Double | W | Active power L3 |
+| `ns=2;i=6110` | Q_SUM | Double | var | Reactive power, sum L1-L3 |
+| `ns=2;i=6111` | Q_L1 | Double | var | Reactive power L1 |
+| `ns=2;i=6112` | Q_L2 | Double | var | Reactive power L2 |
+| `ns=2;i=6113` | Q_L3 | Double | var | Reactive power L3 |
+| `ns=2;i=6120` | S_SUM | Double | VA | Apparent power, sqrt(P^2 + Q^2) |
+| `ns=2;i=6121` | S_L1 | Double | VA | Apparent power L1 |
+| `ns=2;i=6122` | S_L2 | Double | VA | Apparent power L2 |
+| `ns=2;i=6123` | S_L3 | Double | VA | Apparent power L3 |
+| `ns=2;i=6130` | PF_SUM | Double | - | Total power factor, P / S |
+| `ns=2;i=6131` | PF_L1 | Double | - | Power factor L1 |
+| `ns=2;i=6132` | PF_L2 | Double | - | Power factor L2 |
+| `ns=2;i=6133` | PF_L3 | Double | - | Power factor L3 |
+| `ns=2;i=6201` | P_DMD | Double | W | Average active power over the demand window (default 15 min) |
+| `ns=2;i=6202` | P_DMD_MAX | Double | W | Highest demand value since start |
+| `ns=2;i=6301` | F | Double | Hz | Grid frequency |
+| `ns=2;i=6311` | THDU_L1 | Double | % | Total harmonic distortion, voltage L1 |
+| `ns=2;i=6312` | THDU_L2 | Double | % | Total harmonic distortion, voltage L2 |
+| `ns=2;i=6313` | THDU_L3 | Double | % | Total harmonic distortion, voltage L3 |
+| `ns=2;i=6321` | THDI_L1 | Double | % | Total harmonic distortion, current L1 |
+| `ns=2;i=6322` | THDI_L2 | Double | % | Total harmonic distortion, current L2 |
+| `ns=2;i=6323` | THDI_L3 | Double | % | Total harmonic distortion, current L3 |
+| `ns=2;i=7001` | EP_IMP | Double | Wh | Active energy, import (counter) |
+| `ns=2;i=7002` | EP_EXP | Double | Wh | Active energy, export (counter) |
+| `ns=2;i=7003` | EQ_IMP | Double | varh | Reactive energy, import (counter) |
+| `ns=2;i=7004` | ES | Double | VAh | Apparent energy (counter) |
+| `ns=2;i=9001` | STATUS | UInt16 | bits | b0 = online (always 1), b1 = alarm (toggles every 60 s) |
 
 ## Connecting from your own client
 
@@ -150,7 +241,7 @@ voltage x current x power factor, and the voltage is fixed at nominal:
 
 ```yaml
   energy-sim-big:
-    image: skumh/modbus-energy-simulator:0.2.0
+    image: skumh/modbus-energy-simulator:0.3.0
     environment:
       SIM_NOMINAL_CURRENT: "10"      # 5 A -> 10 A, so ~3.2 kW -> ~6.4 kW
     logging:
@@ -199,10 +290,12 @@ line.
 
 **These are averages, not load profiles.** A real machining centre sits at
 2-4 kW between parts and jumps to 12-15 kW in the cut; a furnace ramps near
-full power and drops to a fraction of it while soaking. This simulator wobbles
-smoothly around one mean and knows nothing about a machine cycle, which is fine
-for consumption dashboards and for telling assets apart, and wrong if you need
-the idle/cut or ramp/soak structure.
+full power and drops to a fraction of it while soaking. By default the
+simulator wobbles smoothly around one mean. Since 0.3.0 `SIM_LOAD_PROFILE=machine`
+alternates production (at `nominal_current`) and idle (at `idle_load_factor` x
+nominal, default 0.25) with random durations (`production_min/max_seconds`,
+`idle_min/max_seconds`), which gives a dashboard visible steps and an alert
+something to fire on. It is still no ramp/soak model.
 
 ### Why nominal_current only became a real knob in 0.2.0
 
@@ -217,3 +310,22 @@ meters configured differently were indistinguishable after an hour or two.
 `nominal_current`, which brings the standard deviation down to 0.58 A and makes
 the mean sit on the configured value. Set `SIM_CURRENT_PULL=0` for the old
 free-walk behaviour.
+
+## Tests
+
+```bash
+pip install "pymodbus==3.8.*" "asyncua==1.1.*" pyyaml pytest
+pytest tests/test_model.py                      # physics: phase sums, power triangle, counters, demand
+python -m sim.server & python tests/client_smoke.py
+python -m sim.opcua_server & python tests/opcua_smoke.py
+```
+
+## Changelog
+
+- **0.3.0**: full 3-phase point set (per-phase P/Q/S/pf, line voltages, neutral
+  current, reactive and apparent energy, 15-min demand, THD); OPC UA server on
+  the same model (`skumh/opcua-energy-simulator`); `load_profile: machine`. The
+  total power factor is now P / S of the three phases (each phase has its own
+  pf). Modbus addresses of 0.2.0 are unchanged.
+- **0.2.0**: `SIM_<KEY>` overrides; `current_pull` makes `nominal_current` a real knob.
+- **0.1.1**: pymodbus 3.8, fixes the listening-socket leak.
